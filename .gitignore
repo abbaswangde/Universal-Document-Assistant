@@ -1,0 +1,33 @@
+
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# ChromaDB local database
+data/chroma_db/
+
+# Uploaded/sample PDF documents
+data/sample_documents/*.pdf
+data/uploads/
+
+# Model caches
+.cache/
+.cache_huggingface/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
