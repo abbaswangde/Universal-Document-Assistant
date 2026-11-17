@@ -1,4 +1,5 @@
 
+import json
 import chromadb
 
 
@@ -9,14 +10,51 @@ def get_chroma_client(persist_directory="data/chroma_db"):
     return chromadb.PersistentClient(path=persist_directory)
 
 
+def prepare_metadata(chunk, document_id):
+    """
+    Prepare chunk metadata for ChromaDB.
+
+    ChromaDB supports string, integer, float and boolean
+    metadata values. Complex values are converted to JSON strings.
+    """
+
+    metadata = {
+        "document_id": str(document_id),
+        "chunk_id": int(chunk["chunk_id"])
+    }
+
+    for key, value in chunk.items():
+
+        if key in ("text", "chunk_id"):
+            continue
+
+        if value is None:
+            continue
+
+        if isinstance(value, (str, int, float, bool)):
+            metadata[key] = value
+
+        else:
+            metadata[key] = json.dumps(
+                value,
+                ensure_ascii=False,
+                default=str
+            )
+
+    return metadata
+
+
 def store_embeddings(
     chunks,
     embeddings,
     collection_name="documents",
-    document_id="sample"
+    document_id="sample",
+    persist_directory="data/chroma_db"
 ):
     """
     Store document chunks and their embeddings in ChromaDB.
+
+    Preserves metadata from all supported document formats.
     """
 
     if len(chunks) != len(embeddings):
@@ -25,7 +63,7 @@ def store_embeddings(
     if not chunks:
         return 0
 
-    client = get_chroma_client()
+    client = get_chroma_client(persist_directory)
 
     collection = client.get_or_create_collection(
         name=collection_name,
@@ -43,11 +81,7 @@ def store_embeddings(
     ]
 
     metadatas = [
-        {
-            "document_id": document_id,
-            "chunk_id": int(chunk["chunk_id"]),
-            "page": int(chunk["page"])
-        }
+        prepare_metadata(chunk, document_id)
         for chunk in chunks
     ]
 

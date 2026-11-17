@@ -1,7 +1,7 @@
 
 from pathlib import Path
 
-from app.ingestion.pdf_loader import extract_text_from_pdf
+from app.ingestion.loaders.document_loader import load_document
 from app.ingestion.chunker import split_into_chunks
 from app.ingestion.embedder import generate_embeddings
 from app.ingestion.vector_store import store_embeddings
@@ -15,59 +15,75 @@ COLLECTION_NAME = "documents"
 
 def upload_document():
 
-    print("\n" + "=" * 50)
-    print("          UPLOAD YOUR PDF DOCUMENT")
-    print("=" * 50)
+    print("\n" + "=" * 55)
+    print("          UNIVERSAL DOCUMENT ASSISTANT")
+    print("=" * 55)
 
-    pdf_path = input("\nEnter PDF file path: ").strip()
+    print("\nSupported formats:")
+    print("PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, JSON, HTML")
+    print("PNG, JPG, JPEG, TIFF, BMP")
+    print("Legacy: DOC, XLS, PPT (requires LibreOffice)")
 
-    # Support paths pasted with surrounding quotes
-    pdf_path = pdf_path.strip('"').strip("'")
+    file_path = input("\nEnter document file path: ").strip()
 
-    if not pdf_path:
-        print("No file path provided.")
+    # Support paths pasted with surrounding quotes.
+    file_path = file_path.strip('"').strip("'")
+
+    if not file_path:
+        print("\nNo file path provided.")
         return None
 
-    file_path = Path(pdf_path).expanduser()
+    file_path = Path(file_path).expanduser()
 
     if not file_path.exists() or not file_path.is_file():
         print("\nError: File not found.")
         return None
 
-    if file_path.suffix.lower() != ".pdf":
-        print("\nError: Please upload a PDF file.")
-        return None
-
-    document_id = file_path.stem
-
     try:
-        print("\n[1/4] Extracting PDF text...")
 
-        pages = extract_text_from_pdf(str(file_path))
+        print("\n[1/4] Extracting document content...")
 
-        if not pages:
-            print("No text could be extracted from this PDF.")
+        document = load_document(file_path)
+
+        records = document["content"]
+
+        if not records:
+            print("No content could be extracted from this document.")
             return None
 
-        print(f"Extracted {len(pages)} pages.")
+        # Ensure every record has basic source information.
+        for record in records:
+            record.setdefault("source", document["filename"])
+            record.setdefault(
+                "source_type",
+                document["file_type"].lstrip(".")
+            )
 
-        print("\n[2/4] Splitting text into chunks...")
+        print("Document:", document["filename"])
+        print("File type:", document["file_type"])
+        print("Extracted characters:", document["character_count"])
+        print("Extracted records:", len(records))
 
-        chunks = split_into_chunks(pages)
+        print("\n[2/4] Splitting content into chunks...")
+
+        chunks = split_into_chunks(records)
 
         if not chunks:
             print("No text chunks were generated.")
             return None
 
-        print(f"Generated {len(chunks)} chunks.")
+        print("Generated chunks:", len(chunks))
 
         print("\n[3/4] Generating embeddings...")
 
         embeddings = generate_embeddings(chunks)
 
-        print(f"Generated {len(embeddings)} embeddings.")
+        print("Generated embeddings:", len(embeddings))
 
         print("\n[4/4] Storing document in ChromaDB...")
+
+        # Keep the existing document ID convention.
+        document_id = file_path.stem
 
         total_stored = store_embeddings(
             chunks=chunks,
@@ -76,40 +92,51 @@ def upload_document():
             document_id=document_id
         )
 
-        print("\nDocument uploaded and processed successfully!")
-        print("Document:", file_path.name)
-        print("Pages:", len(pages))
-        print("Chunks:", len(chunks))
-        print("Records in collection:", total_stored)
+        print("\n" + "=" * 55)
+        print("       DOCUMENT PROCESSED SUCCESSFULLY!")
+        print("=" * 55)
 
-        return document_id, file_path.name
+        print("Filename:", document["filename"])
+        print("Document ID:", document_id)
+        print("File type:", document["file_type"])
+        print("Records:", len(records))
+        print("Chunks:", len(chunks))
+        print("Total records in collection:", total_stored)
+
+        return document_id, document["filename"]
 
     except Exception as error:
-        print(f"\nDocument processing failed: {error}")
+
+        print("\nDocument processing failed:")
+        print(error)
+
         return None
 
 
 def start_chat(document_id, document_name):
 
-    print("\n" + "=" * 50)
-    print("       UNIVERSAL DOCUMENT ASSISTANT")
-    print("=" * 50)
+    print("\n" + "=" * 55)
+    print("             DOCUMENT CHAT")
+    print("=" * 55)
 
-    print(f"\nDocument loaded: {document_name}")
-    print("Ask questions about your document.")
-    print("Type 'exit' or 'quit' to end the chat.\n")
+    print("\nDocument loaded:", document_name)
+    print("\nAsk questions about your document.")
+    print("Type 'exit' or 'quit' to end the conversation.")
 
     while True:
 
         try:
-            query = input("You: ").strip()
 
-            if query.lower() in ["exit", "quit"]:
+            query = input("\nYou: ").strip()
+
+            if query.lower() in ("exit", "quit"):
                 print("\nGoodbye!")
                 break
 
             if not query:
                 continue
+
+            print("\nSearching document...")
 
             retrieved_chunks = search_documents(
                 query=query,
@@ -118,30 +145,43 @@ def start_chat(document_id, document_name):
                 document_id=document_id
             )
 
+            if not retrieved_chunks:
+                print(
+                    "\nAssistant: I couldn't find relevant "
+                    "information in this document."
+                )
+                continue
+
             answer = generate_answer(
                 query=query,
                 retrieved_chunks=retrieved_chunks
             )
 
             print("\nAssistant:", answer)
-            print("\n" + "-" * 50 + "\n")
+
+            print("\n" + "-" * 55)
 
         except KeyboardInterrupt:
             print("\n\nChat ended. Goodbye!")
             break
 
         except Exception as error:
-            print(f"\nAn error occurred: {error}\n")
+            print("\nAn error occurred:", error)
 
 
-if __name__ == "__main__":
+def main():
 
     document_info = upload_document()
 
     if document_info:
+
         document_id, document_name = document_info
 
         start_chat(
             document_id=document_id,
             document_name=document_name
         )
+
+
+if __name__ == "__main__":
+    main()
