@@ -36,11 +36,65 @@ class TestPowerPointParser(unittest.TestCase):
 
             result = parse_powerpoint(file_path)
 
-            self.assertIn("Slide 1", result)
+            self.assertIsInstance(result, list)
+            self.assertEqual(len(result), 1)
+
+            record = result[0]
+
             self.assertIn(
                 "Universal Document Assistant",
-                result
+                record["text"]
             )
+
+            self.assertEqual(record["source"], "sample.pptx")
+            self.assertEqual(record["source_type"], "pptx")
+            self.assertEqual(record["page"], 1)
+            self.assertEqual(record["slide"], 1)
+
+    def test_multiple_slides(self):
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+
+            file_path = Path(temp_dir) / "multiple.pptx"
+
+            presentation = Presentation()
+
+            for index in range(3):
+
+                slide = presentation.slides.add_slide(
+                    presentation.slide_layouts[6]
+                )
+
+                textbox = slide.shapes.add_textbox(
+                    Inches(1),
+                    Inches(1),
+                    Inches(5),
+                    Inches(1)
+                )
+
+                textbox.text = f"Slide content {index + 1}"
+
+            presentation.save(file_path)
+
+            result = parse_powerpoint(file_path)
+
+            self.assertEqual(len(result), 3)
+            self.assertEqual(result[0]["slide"], 1)
+            self.assertEqual(result[1]["slide"], 2)
+            self.assertEqual(result[2]["slide"], 3)
+
+    def test_empty_presentation(self):
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+
+            file_path = Path(temp_dir) / "empty.pptx"
+
+            presentation = Presentation()
+            presentation.save(file_path)
+
+            result = parse_powerpoint(file_path)
+
+            self.assertEqual(result, [])
 
     def test_missing_file(self):
 

@@ -1,23 +1,30 @@
 
 from pathlib import Path
+
 import openpyxl
 import xlrd
+
+from app.ingestion.loaders.text_parser import create_record
 
 
 def parse_excel(file_path):
     """
     Extract text from XLSX and XLS spreadsheets.
-    Supports multiple worksheets.
+
+    Returns one standardized record per worksheet.
+    Preserves worksheet names in metadata.
     """
 
     file_path = Path(file_path)
 
     if not file_path.exists():
-        raise FileNotFoundError(f"File not found: {file_path}")
+        raise FileNotFoundError(
+            f"File not found: {file_path}"
+        )
 
     extension = file_path.suffix.lower()
 
-    extracted_text = []
+    records = []
 
     if extension == ".xlsx":
 
@@ -27,53 +34,81 @@ def parse_excel(file_path):
             read_only=True
         )
 
-        for sheet in workbook.worksheets:
+        try:
+            for sheet_index, sheet in enumerate(workbook.worksheets):
 
-            extracted_text.append(
-                f"\nSheet: {sheet.title}"
-            )
+                extracted_rows = []
 
-            for row in sheet.iter_rows(values_only=True):
+                for row in sheet.iter_rows(values_only=True):
 
-                row_values = [
-                    str(value).strip()
-                    for value in row
-                    if value is not None
-                ]
+                    row_values = [
+                        str(value).strip()
+                        for value in row
+                        if value is not None
+                    ]
 
-                if row_values:
-                    extracted_text.append(
-                        " | ".join(row_values)
+                    if row_values:
+                        extracted_rows.append(
+                            " | ".join(row_values)
+                        )
+
+                text = "\n".join(extracted_rows).strip()
+
+                if text:
+                    record = create_record(
+                        text=text,
+                        file_path=file_path,
+                        source_type="xlsx",
+                        page=sheet_index + 1
                     )
 
-        workbook.close()
+                    record["sheet"] = sheet.title
+                    records.append(record)
+
+        finally:
+            workbook.close()
 
     elif extension == ".xls":
 
         workbook = xlrd.open_workbook(str(file_path))
 
-        for sheet in workbook.sheets():
+        try:
+            for sheet_index, sheet in enumerate(workbook.sheets()):
 
-            extracted_text.append(
-                f"\nSheet: {sheet.name}"
-            )
+                extracted_rows = []
 
-            for row_index in range(sheet.nrows):
+                for row_index in range(sheet.nrows):
 
-                row_values = [
-                    str(value).strip()
-                    for value in sheet.row_values(row_index)
-                    if value != ""
-                ]
+                    row_values = [
+                        str(value).strip()
+                        for value in sheet.row_values(row_index)
+                        if value != ""
+                    ]
 
-                if row_values:
-                    extracted_text.append(
-                        " | ".join(row_values)
+                    if row_values:
+                        extracted_rows.append(
+                            " | ".join(row_values)
+                        )
+
+                text = "\n".join(extracted_rows).strip()
+
+                if text:
+                    record = create_record(
+                        text=text,
+                        file_path=file_path,
+                        source_type="xls",
+                        page=sheet_index + 1
                     )
+
+                    record["sheet"] = sheet.name
+                    records.append(record)
+
+        finally:
+            workbook.release_resources()
 
     else:
         raise ValueError(
             f"Unsupported Excel format: {extension}"
         )
 
-    return "\n".join(extracted_text)
+    return records

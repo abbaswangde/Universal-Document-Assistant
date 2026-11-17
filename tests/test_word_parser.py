@@ -17,7 +17,10 @@ class TestWordParser(unittest.TestCase):
             file_path = Path(temp_dir) / "sample.docx"
 
             document = Document()
-            document.add_paragraph("Hello Universal Document Assistant")
+
+            document.add_paragraph(
+                "Hello Universal Document Assistant"
+            )
 
             table = document.add_table(rows=1, cols=2)
             table.cell(0, 0).text = "Name"
@@ -27,12 +30,24 @@ class TestWordParser(unittest.TestCase):
 
             result = parse_word(file_path)
 
+            self.assertIsInstance(result, list)
+            self.assertEqual(len(result), 1)
+
+            record = result[0]
+
             self.assertIn(
                 "Hello Universal Document Assistant",
-                result
+                record["text"]
             )
 
-            self.assertIn("Name | Abbas", result)
+            self.assertIn(
+                "Name | Abbas",
+                record["text"]
+            )
+
+            self.assertEqual(record["source"], "sample.docx")
+            self.assertEqual(record["source_type"], "docx")
+            self.assertEqual(record["page"], 1)
 
     def test_missing_file(self):
 
